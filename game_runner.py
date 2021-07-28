@@ -28,16 +28,39 @@ def main():
         players.append(Player(starting_stack, i))
 
     while cur_hand < hands:
-        play_one_hand(players, max_players, d, sb_pos)
+        play_one_hand(players, len(players), d, sb_pos)
+
+        # Check to see if any players are out
+        i = 0
+        while i < len(players):
+            p = players[i]
+            removed_pos = -1
+            if p.is_out():
+                removed_pos = p.position
+                players.remove(p)
+                i -= 1
+
+                for pl in players:
+                    if pl.position > removed_pos:
+                        pl.update_position(len(players)) # Drops the position by one
+            
+            i += 1
+        
+        if len(players) == 1:
+            print(players[0].get_info())
+            print("The above player has won the game!")
+            break
 
         d.shuffle_deck()
-        sb_pos = (sb_pos + 1) % max_players
+        sb_pos = (sb_pos + 1) % len(players)
         cur_hand += 1
 
 def play_one_hand(players, max_players, d, sb_pos):
         d.shuffle_deck()
         board = [] # Stores the table cards
         players_in_hand = max_players
+        for p in players:
+            print(p.get_info())
 
         # pre-flop
         for p in players:
@@ -56,6 +79,7 @@ def play_one_hand(players, max_players, d, sb_pos):
         last_player = 2 + max_players
         cur_player = 2
         default_legal_moves = [0, 2, 3, 4]
+        player_is_all_in = False
         while True:
             # Beause for some reason updating the while condition breaks it
             if reached_end_of_street(cur_player, last_player):
@@ -69,6 +93,13 @@ def play_one_hand(players, max_players, d, sb_pos):
                 break # if this is the only player left, return
             elif p.current_bet == call_amount:
                 legal_moves = [1, 3, 4]
+            # If either your stack is nothing because of a bet or
+            # another player is all in and you've already called the all in
+            if get_smallest_stack_still_in(players) == 0:
+                print("This player is already all in")
+                d.print_hand(p.cards)
+                cur_player += 1
+                continue
 
             # Limit legal moves if certain conditions are met
             if p.get_folded():
@@ -97,10 +128,13 @@ def play_one_hand(players, max_players, d, sb_pos):
                 call_amount = action.amount
                 last_player = cur_player + max_players
             elif action.move == 4:
+                player_is_all_in = True
                 p.do_raise()
-                call_amount = p.bet(p.get_stack)
+                shove_amount = get_smallest_stack_still_in(players)
+                call_amount = p.bet(shove_amount)
                 pot += call_amount
                 last_player = cur_player + max_players
+                default_legal_moves = [0, 2]
             
             cur_player += 1
         
@@ -121,8 +155,10 @@ def play_one_hand(players, max_players, d, sb_pos):
         d.get_next_card() # Burn one card
         for i in range(0, 3):
             board.append(d.get_next_card())
+        print("The Board")
+        d.print_hand(board)
         
-        pot, players_in_hand, call_amount = run_post_flop_rounds(players, pot, call_amount, sb_pos, max_players, board, players_in_hand, d)
+        pot, players_in_hand, call_amount = run_post_flop_rounds(players, pot, call_amount, sb_pos, max_players, board, players_in_hand, d, player_is_all_in)
         
         if players_in_hand == 1:
             pay_out_if_one_player(players, pot)
@@ -140,8 +176,10 @@ def play_one_hand(players, max_players, d, sb_pos):
         # Lay out the board
         d.get_next_card() # Burn one card
         board.append(d.get_next_card())
+        print("The Board")
+        d.print_hand(board)
 
-        pot, players_in_hand, call_amount = run_post_flop_rounds(players, pot, call_amount, sb_pos, max_players, board, players_in_hand, d)
+        pot, players_in_hand, call_amount = run_post_flop_rounds(players, pot, call_amount, sb_pos, max_players, board, players_in_hand, d, player_is_all_in)
 
         if players_in_hand == 1:
             pay_out_if_one_player(players, pot)
@@ -158,8 +196,10 @@ def play_one_hand(players, max_players, d, sb_pos):
         print("TO THE RIVER")
         d.get_next_card() # Burn one card
         board.append(d.get_next_card())
+        print("The Board")
+        d.print_hand(board)
 
-        pot, players_in_hand, call_amount = run_post_flop_rounds(players, pot, call_amount, sb_pos, max_players, board, players_in_hand, d)
+        pot, players_in_hand, call_amount = run_post_flop_rounds(players, pot, call_amount, sb_pos, max_players, board, players_in_hand, d, player_is_all_in)
 
         if players_in_hand == 1:
             pay_out_if_one_player(players, pot)
@@ -174,8 +214,10 @@ def play_one_hand(players, max_players, d, sb_pos):
 
         # Showdown
         print("To the Showdown!")
+        print("The Board")
+        d.print_hand(board)
         # If we've gotten to this point we know go from player to player and find their best hand and compare them
-        worst_hand = [1, 15, 3, 16, 5] # This is the worst 5 card hand in poker
+        worst_hand = [1, 15, 3, 17, 6] # This is the worst 5 card hand in poker
 
         # Store the best hand object we find and the player it's associated with
         best_player = -1
@@ -224,6 +266,15 @@ def play_one_hand(players, max_players, d, sb_pos):
             pot = 0
         
         end_hand(players, max_players)
+
+def get_smallest_stack_still_in(players):
+    smallest = 999999999
+    for p in players:
+        total_stack = p.stack + p.current_bet
+        if total_stack < smallest:
+            smallest = total_stack
+    
+    return smallest
         
 def end_hand(players, max_players):
     print("END OF HAND")
@@ -233,7 +284,7 @@ def end_hand(players, max_players):
         p.reset()
 
 # Runs all post flop rounds since they all run the same, returns a tuple of (pot, players_in_hand)
-def run_post_flop_rounds(players, pot, prev_amount_in, sb_pos, max_players, board, players_in_hand, d):
+def run_post_flop_rounds(players, pot, prev_amount_in, sb_pos, max_players, board, players_in_hand, d, player_is_all_in):
     cur_player = 0
     last_player = max_players
     call_amount = 0
@@ -254,6 +305,11 @@ def run_post_flop_rounds(players, pot, prev_amount_in, sb_pos, max_players, boar
             continue # move onto the next player
         if p.get_called() or p.get_raised():
             legal_moves = [0, 2]
+        if get_smallest_stack_still_in(players) == 0:
+            print("Someone is all in")
+            d.print_hand(p.cards)
+            cur_player += 1
+            continue
 
         print("Board Cards")
         d.print_hand(board)
@@ -281,11 +337,13 @@ def run_post_flop_rounds(players, pot, prev_amount_in, sb_pos, max_players, boar
             last_player = cur_player + max_players
             default_legal_moves = [0, 2, 3, 4]
         elif action.move == 4:
+            player_is_all_in = True
             p.do_raise()
-            call_amount = p.bet(p.get_stack)
+            shove_amount = get_smallest_stack_still_in(players)
+            call_amount = p.bet(shove_amount)
             pot += call_amount
             last_player = cur_player + max_players
-            default_legal_moves = [0, 2, 3, 4] # Adjust the legal moves now that there's a bet
+            default_legal_moves = [0, 2]
         cur_player += 1
     
     return (pot, players_in_hand, call_amount)

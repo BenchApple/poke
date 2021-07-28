@@ -56,6 +56,10 @@ class Player:
         self._stack -= amount
         self.total_in += amount
         self.current_bet += amount
+
+        if self._stack < 0:
+            amount += self._stack # Set the amount to be the max this player can put in
+            self._stack = 0
         
         return amount
 
@@ -65,7 +69,7 @@ class Player:
     
     # Returns whether or not the balance is negative
     def is_out(self):
-        return self._stack > 0
+        return self._stack <= 0
 
     # Returns info on the player such as stack size, position, money in, current bet
     def get_info(self):
