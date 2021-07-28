@@ -16,6 +16,7 @@ class Deck:
 
     def shuffle_deck(self):
         shuffle(self.cards)
+        self.pos = 0
 
     def get_next_card(self):
         self.pos += 1

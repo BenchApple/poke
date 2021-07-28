@@ -7,6 +7,8 @@ from hands import Hand, HandClass
 def hand_checker(cards):
     assert(len(cards) == 7)
 
+    return get_top_hand(cards)
+
 def get_top_hand(cards):
     if len(cards) > 5:
         hands = []
